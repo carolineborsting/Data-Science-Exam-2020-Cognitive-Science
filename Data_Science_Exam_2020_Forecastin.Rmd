@@ -1,0 +1,215 @@
+---
+title: 'Forecasting Tobacco Production: A Comparison of Predictive Forecasting Methods'
+author: "Sebastian Jakobsen & Caroline Kjær Børsting"
+date: "25/5/2020"
+output:
+  html_document:
+    df_print: paged
+  pdf: default
+  pdf_document: default
+---
+#Load packages
+```{r}
+options(warn=-1)
+library(forecast)
+library(ggplot2)
+library(tseries) 
+library(tidyverse)
+library(tinytex)
+```
+
+#Load data
+```{r}
+tobacco <- read.csv("tobacco.csv", sep = ";")
+tobacco <- ts(tobacco, start = 1956, frequency = 4) #Transform into time series
+```
+
+#Plotting / inspecting data
+```{r}
+#Inspect data
+autoplot(tobacco)
+
+#Plotting estimated trends, seasonal and irregular components
+d <- decompose(tobacco)
+plot(d)
+```
+
+#Auto Correlation function plot
+```{r}
+#Create ACF plot for inspection of residuals 
+ggtsdisplay(tobacco)
+
+Acf(tobacco)
+# Time series specific plots
+ggseasonplot(tobacco) + theme_minimal()
+
+#Ljung Box autocorrelation check with/without log transformation
+Box.test(tobacco, type = "Ljung-Box", lag = 40)
+
+Box.test(log(tobacco), type = "Ljung-Box", lag = 40)
+```
+
+#Train & Test dataset
+```{r}
+#Make train data. Train on years from 1956-1994. Test set is 1995-2004. 
+
+train <- subset(tobacco, end=length(tobacco)-40)
+test <- subset(tobacco, start=length(tobacco)-39)
+```
+
+#Naive and Seasonal naive multi-step forecasting methods.
+```{r}
+#Naive forecast
+naive_train <- naive(train, h = 40, level = c(80), lambda = 0)
+
+#Plot the forecasting against the test data
+naive_train %>%
+  autoplot(ylab = "Tobacco production in tonnes") + autolayer(test, series = "Test dataset") 
+#prediction accuracy   
+accuracy(naive_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data",ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(naive_train, h=4, level = 80),
+series="4-step fitted values")  
+
+#Test the accuracy of the training fit on the test data
+naive_test <- naive(test, model=naive_train, lambda = 0) 
+accuracy(naive_test)
+
+#Check of residuals for ensuring stationarity
+checkresiduals(naive_train)
+
+#Seasonal naive forecasting 
+snaive_train <- snaive(train, h = 40, level = c(80), lambda = 0)
+
+#Plot the forecasting against the test data
+snaive_train %>%
+  autoplot(ylab = "Tobacco production in tonnes") + autolayer(test, series = "Test dataset") 
+#prediction accuracy   
+accuracy(snaive_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data",ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(snaive_train, h=4, level = 80),
+series="4-step fitted values")  
+
+#Test the accuracy of the training fit on the test data
+snaive_test <- snaive(test, model=snaive_train, lambda = 0) 
+accuracy(snaive_test)
+
+#Check of residuals for ensuring stationarity
+checkresiduals(snaive_train)
+```
+
+#Holt-Winters multi-step forecasting 
+```{r}
+#Holt-Winters multiplicative forecasting model
+hw_train <- hw(train, seasonal = "multiplicative", h=40)
+hw_train <- forecast(hw_train, lambda = 0)
+#Plot the forecasting against the test data
+hw_train %>%
+  autoplot(ylab = "Tobacco production in tonnes", PI = 80) + autolayer(test, series = "Test dataset") 
+ #prediction accuracy   
+accuracy(hw_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data",ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(hw_train, h=4, level = 80),
+series="4-step fitted values")  
+
+#Test the accuracy of the training fit on the test data
+hw_test <- hw(test, model=hw_train, lambda = 0) 
+accuracy(hw_test)
+
+#Check of residuals for ensuring stationarity
+checkresiduals(hw_train)
+
+#Damped:
+hw_damped_train <- hw(train, seasonal = "multiplicative", h = 40, damped = TRUE, phi = 0.95)
+hw_damped_train <- forecast(hw_damped_train, lamdba = 0)
+#Plot the forecasting against the test data
+hw_damped_train %>%
+  autoplot(ylab = "Tobacco production in tonnes") + autolayer(test, series = "Test dataset") 
+#prediction accuracy   
+accuracy(hw_damped_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data", ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(hw_damped_train, h=4, PI = TRUE),
+series="4-step fitted values")  
+
+#Test the accuracy of the training fit on the test data
+hw_damped_test <- hw(test, model=hw_damped_train, lambda = 0) 
+accuracy(hw_damped_test)
+
+#Check of residuals for ensuring stationarity
+checkresiduals(hw_damped_train)
+```
+
+#ARIMA multi-step forecasting
+```{r}
+Auto_Arima_train <- auto.arima(train, lambda = 0, stepwise = FALSE)
+Arima_train <- Arima(train, order = c(2,1,2), seasonal = c(0,1,1), lambda = 0)
+
+#Plot the forecasting against the test data
+Arima_train %>%
+  forecast(h=40, level = c(80)) %>%
+  autoplot(ylab = "Tobacco production in tonnes") + autolayer(test, series = "Test dataset") 
+  accuracy(Arima_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data",ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(Arima_train, h=4, level = 80),
+series="4-step fitted values")  
+  
+#Test the accuracy of the training fit on the test data
+Arima_test <- Arima(test, model=Arima_train, lambda = 0) 
+accuracy(Arima_test)
+
+#Check of residuals for ensuring stationarity
+checkresiduals(Arima_train)
+```
+
+#TBATS multi-step forecasting
+```{r}
+
+tbats_train <- tbats(train,use.box.cox = NULL, use.trend = NULL, use.arma.errors = TRUE, use.damped.trend = NULL)
+
+#Plot the forecasting against the test data
+tbats_train %>%
+  forecast(h=40, level = c(80)) %>%
+  autoplot(ylab = "Tobacco production in tonnes", title = "Forecasting from TBATS") + autolayer(test,series = "Test dataset") 
+  accuracy(tbats_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data",ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(tbats_train, h=4),
+series="4-step fitted values")  
+  
+#Test the accuracy of the training fit on the test data
+tbats_test <- tbats(test, model=tbats_train) 
+accuracy(tbats_test)
+
+#Check of residuals for ensuring stationarity
+checkresiduals(tbats_train)
+```
+
+#Neural Network multi-step forecasting
+```{r}
+#Making Neural network model fit on training data
+nn_train <- nnetar(train, repeats = 30, P = 3, size = 7, lambda = 0)
+
+#Plot the forecasting against the test data
+nn_train %>%
+  forecast(h=40, level = c(80), lambda = 0) %>%
+  autoplot(ylab = "Tobacco production in tonnes",ylab="Tobacco production in tonnes", main="Forecasting(Blue) from Neural network") + autolayer(test, series = "Test dataset") 
+  accuracy(nn_train)
+
+#Plot the model fit on the training data with the training data. 
+autoplot(train, series="Training data",ylab="Tobacco production in tonnes", main="Fitted values from the  model on the training data") + autolayer(fitted(nn_train, h=4),
+series="4-step fitted values")
+  
+#Test the accuracy of the training fit on the test data
+nn_test <- nnetar(test, model=nn_train) 
+accuracy(nn_test)
+
+#Check of residuals for ensuring stationarity + Ljung-Box test score. 
+checkresiduals(nn_train$residuals)
+Box.test(nn_train$residuals, lag = 10, type = c("Ljung-Box"), fitdf = 0)
+```
+
